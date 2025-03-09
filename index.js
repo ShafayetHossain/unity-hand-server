@@ -17,7 +17,6 @@ const client = new MongoClient(uri, {
     deprecationErrors: true,
   },
 });
-
 async function run() {
   try {
     const eventsCollection = client.db("eventsDB").collection("events");
