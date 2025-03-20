@@ -7,7 +7,10 @@ const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const app = express();
 app.use(
   cors({
-    origin: ["http://localhost:5173"], // ✅ Allow requests from frontend
+    origin: [
+      "http://localhost:5173", // ✅ Allow local development
+      "https://unity-hands.netlify.app", // ✅ Allow deployed frontend
+    ],
     credentials: true, // ✅ Allow sending cookies
   })
 );
@@ -80,8 +83,8 @@ async function run() {
       res
         .cookie("token", token, {
           httpOnly: true,
-          secure: false,
-          sameSite: "lax", //If you're on HTTPS: sameSite: "none",
+          secure: true, // secure: true, // ✅ Must be true for HTTPS before deploy but when it's run localhost then // secure: false
+          sameSite: "none", // sameSite: "none", // ✅ Required for cross-origin cookies before deploy but when it's run localhost then // sameSite: "lax"
         })
         .send({ success: true });
     });
@@ -120,7 +123,7 @@ async function run() {
       res.send(result);
     });
 
-    app.patch("/events/:id",verifyToken, async (req, res) => {
+    app.patch("/events/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
       const updateEvent = req.body;
       const filter = { _id: new ObjectId(id) };
@@ -143,11 +146,13 @@ async function run() {
       const query = { _id: new ObjectId(id) };
 
       const result = await eventsCollection.deleteOne(query);
-      const applicationResult = await applicationCollection.deleteMany({ job_id: id.toString() });
+      const applicationResult = await applicationCollection.deleteMany({
+        job_id: id.toString(),
+      });
       res.send(result);
     });
 
-    app.get("/application",verifyToken, async (req, res) => {
+    app.get("/application", verifyToken, async (req, res) => {
       const userEmail = req.query.user;
       const query = { applicant_email: userEmail };
       const options = {
@@ -214,3 +219,5 @@ run();
 app.listen(port, () => {
   console.log("Server Listening On Port", port);
 });
+
+
