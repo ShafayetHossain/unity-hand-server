@@ -1,11 +1,51 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
+const jwt = require("jsonwebtoken");
+const cookieParser = require("cookie-parser");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const app = express();
-
-app.use(cors());
+app.use(
+  cors({
+    origin: ["http://localhost:5173"], // ✅ Allow requests from frontend
+    credentials: true, // ✅ Allow sending cookies
+  })
+);
 app.use(express.json());
+app.use(cookieParser());
+
+const verifyToken = async (req, res, next) => {
+  const token = req?.cookies?.token;
+
+  if (!token) {
+    return res.status(401).send({ message: "Unauthorized Access" });
+  }
+
+  jwt.verify(token, process.env.SECRET_KEY, (err, decoded) => {
+    if (err) {
+      return res.status(401).send({ message: "Unauthorized Access" });
+    } else {
+      next();
+    }
+  });
+};
+
+const verifyTokenMyEvent = async (req, res, next) => {
+  const { user } = req.query;
+  const token = req?.cookies?.token;
+
+  if (!user) {
+    next();
+  } else {
+    jwt.verify(token, process.env.SECRET_KEY, (err, decoded) => {
+      if (decoded?.user != user) {
+        return res.status(401).send({ message: "Unauthorized Access" });
+      } else {
+        next();
+      }
+    });
+  }
+};
 
 const port = process.env.PORT || 3000;
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.vyipd.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
@@ -26,6 +66,24 @@ async function run() {
 
     app.get("/", async (req, res) => {
       res.send("This Is Unity-Hand Server");
+    });
+
+    app.post("/jwt", async (req, res) => {
+      const user = req.body.email;
+
+      // Generate JWT token
+      const token = jwt.sign({ user }, process.env.SECRET_KEY, {
+        expiresIn: "30d",
+      });
+
+      // Store JWT in HTTP-only cookie
+      res
+        .cookie("token", token, {
+          httpOnly: true,
+          secure: false,
+          sameSite: "lax", //If you're on HTTPS: sameSite: "none",
+        })
+        .send({ success: true });
     });
 
     app.get("/events", async (req, res) => {
@@ -49,7 +107,7 @@ async function run() {
       res.send(result);
     });
 
-    app.post("/events", async (req, res) => {
+    app.post("/events", verifyToken, async (req, res) => {
       const newEvent = req.body;
       const result = await eventsCollection.insertOne(newEvent);
       res.send(result);
@@ -62,7 +120,7 @@ async function run() {
       res.send(result);
     });
 
-    app.patch("/events/:id", async (req, res) => {
+    app.patch("/events/:id",verifyToken, async (req, res) => {
       const id = req.params.id;
       const updateEvent = req.body;
       const filter = { _id: new ObjectId(id) };
@@ -80,15 +138,16 @@ async function run() {
       res.send(result);
     });
 
-    app.delete("/events/:id", async (req, res) => {
+    app.delete("/events/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
 
       const result = await eventsCollection.deleteOne(query);
+      const applicationResult = await applicationCollection.deleteMany({ job_id: id.toString() });
       res.send(result);
     });
 
-    app.get("/application", async (req, res) => {
+    app.get("/application",verifyToken, async (req, res) => {
       const userEmail = req.query.user;
       const query = { applicant_email: userEmail };
       const options = {
@@ -103,17 +162,18 @@ async function run() {
           return events;
         })
       );
+
       res.send(eventssResult);
     });
 
-    app.get("/application/:id", async (req, res) => {
+    app.get("/application/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
       const query = { job_id: id };
       const result = await applicationCollection.find(query).toArray();
       res.send(result);
     });
 
-    app.delete("/application/:id", async (req, res) => {
+    app.delete("/application/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
       const query = { job_id: id };
 
@@ -121,7 +181,7 @@ async function run() {
       res.send(result);
     });
 
-    app.delete("/participant/:id", async (req, res) => {
+    app.delete("/participant/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
 
@@ -129,7 +189,7 @@ async function run() {
       res.send(result);
     });
 
-    app.post("/application", async (req, res) => {
+    app.post("/application", verifyToken, async (req, res) => {
       const { job_id, applicant_email } = req.body;
       const existingApplication = await applicationCollection.findOne({
         job_id,
