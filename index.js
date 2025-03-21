@@ -60,12 +60,20 @@ const client = new MongoClient(uri, {
     deprecationErrors: true,
   },
 });
+
+
 async function run() {
   try {
     const eventsCollection = client.db("eventsDB").collection("events");
     const applicationCollection = client
       .db("applicationDB")
       .collection("application");
+
+      const cookieOptions = {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      };
 
     app.get("/", async (req, res) => {
       res.send("This Is Unity-Hand Server");
@@ -79,15 +87,17 @@ async function run() {
         expiresIn: "30d",
       });
 
+     
       // Store JWT in HTTP-only cookie
       res
-        .cookie("token", token, {
-          httpOnly: true,
-          secure: true, // secure: true, // ✅ Must be true for HTTPS before deploy but when it's run localhost then // secure: false
-          sameSite: "none", // sameSite: "none", // ✅ Required for cross-origin cookies before deploy but when it's run localhost then // sameSite: "lax"
-        })
+        .cookie("token", token, cookieOptions)
         .send({ success: true });
     });
+
+    app.post("/logout" ,async(req, res)=>{
+      res.clearCookie('token',cookieOptions)
+      .send({ success: true })
+    })
 
     app.get("/events", async (req, res) => {
       const { user, searchEvent } = req.query;
